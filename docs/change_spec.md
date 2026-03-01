@@ -212,3 +212,11 @@
   - records `main_collect.txt`, `w1_collect.txt`, `collected_diff.txt`, `summary.md` under `reports/preflight/<timestamp>/`,
   - parses collected count and fails on mismatch.
 - Gate integration: `scripts/fast_check.ps1` now blocks on collected count mismatch.
+
+## L1 (2026-03-02): Collect Consistency Gate Semantics
+- Scope: `scripts/**`, `docs/**` only.
+- Default behavior: `fast_check` runs collect-consistency in single-directory mode for current worktree.
+- Multi-directory behavior: cross-worktree consistency check is opt-in via `COLLECT_DIRS` (semicolon-separated paths).
+- Anchor:
+  - tag: `m3-mergeprep-pass-20260302`
+  - commit: `e8e4542`
