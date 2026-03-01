@@ -8,7 +8,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[fast_check] compileall"
-python -m compileall .
+python -X utf8 -m compileall -q .
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
@@ -16,3 +16,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[fast_check] done"
 exit 0
+
