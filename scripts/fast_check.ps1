@@ -26,18 +26,19 @@ if ($untrackedTests) {
   exit 1
 }
 
-# collect-only 一致性预检：
-# - 默认只检查当前目录，避免不同阶段工作树产生误报
-# - 需要跨目录时通过 COLLECT_DIRS 显式指定（分号分隔）
+$pythonCmd = if ($env:PYTHON) { $env:PYTHON } else { "python" }
+# collect-only consistency preflight:
+# - default checks current directory only
+# - set COLLECT_DIRS to enable cross-worktree compare
 if (Test-Path "$PSScriptRoot/check_collect_consistency.ps1") {
   $dirs = $env:COLLECT_DIRS
   $exclude = $env:COLLECT_EXCLUDE
   if ($dirs -and $dirs.Trim().Length -gt 0) {
     Write-Host "[fast_check] collect consistency (multi-dir) enabled via COLLECT_DIRS"
-    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories ($dirs -split ';') -Exclude ($exclude -split ';')
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories ($dirs -split ';') -Exclude ($exclude -split ';') -PythonPath $pythonCmd
   } else {
     Write-Host "[fast_check] collect consistency (single-dir)"
-    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories @((Get-Location).Path)
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories @((Get-Location).Path) -PythonPath $pythonCmd
   }
 }
 if ($LASTEXITCODE -ne 0) {

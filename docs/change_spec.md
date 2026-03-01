@@ -1,29 +1,4 @@
-# Change Spec
-
-## W1: WebGPT <-> Codex CLI Contracts + Strict Gate
-- ChangeLevel: L2
-- Stage: Contracts + Docs-only + Tests-only
-- Scope:
-  - Allowed: `standards/* docs/* tests/* scripts/* config.yaml README.md`
-  - Forbidden: `.venv/ reports/ __pycache__/ .pytest_cache/`
-- Gates: `fast_check` + `full_check` + `strict_check` + `python -m pytest -q`
-- Deliverables:
-  1) `docs/contracts/web_gpt_bridge.md`
-  2) `docs/contracts/codex_cli_io.md`
-  3) `standards/pack.yaml` stage and strict profile extension
-  4) `scripts/strict_check.ps1` with exit-code pass-through
-  5) tests for contract docs + strict gate configuration
-- Contract policy:
-  - version: `v0`
-  - compatibility window: at least one milestone
-  - strict mode rejects unknown fields
-
-### 并行影响评估/门禁（原文保留）
-本次变更做 并行影响评估：是否触及热区（hotspot：冲突高发核心模块，如订单/支付/权限/结算/库存/状态机）？是否涉及迁移（migration：数据库变更）？是否涉及契约（contract：API/事件/DB 约定）破坏？
-若触及热区：要求 PR 更小，指定 owner 审查（建议启用 CODEOWNERS：代码所有者规则）。
-若涉及迁移：必须采用 expand/contract（扩展/收缩：先兼容再收敛）并给出回填（backfill：数据回填）与回滚策略。
-若涉及契约破坏：必须给兼容窗口（compatibility window：新旧并行期）与弃用时间点（deprecation：弃用计划）。
-明确门禁：fast_check 必过；里程碑/热区/迁移变更必须 full_check 必过；未完成功能必须 feature flag（功能开关：默认关闭）。
+﻿# Change Spec
 
 ## W2: Standards Engine
 - ChangeLevel: L2
@@ -95,12 +70,12 @@
   3) write minimum artifact contract
   4) ingest result and proceed or `WAIT_CODEX`
 
-并行影响评估/门禁（必须原文保留）：
-本次变更做 并行影响评估：是否触及热区（hotspot：冲突高发核心模块，如订单/支付/权限/结算/库存/状态机）？是否涉及迁移（migration：数据库变更）？是否涉及契约（contract：API/事件/DB 约定）破坏？
-若触及热区：要求 PR 更小，指定 owner 审查（建议启用 CODEOWNERS：代码所有者规则）。
-若涉及迁移：必须采用 expand/contract（扩展/收缩：先兼容再收敛）并给出回填（backfill：数据回填）与回滚策略。
-若涉及契约破坏：必须给兼容窗口（compatibility window：新旧并行期）与弃用时间点（deprecation：弃用计划）。
-明确门禁：fast_check 必过；里程碑/热区/迁移变更必须 full_check 必过；未完成功能必须 feature flag（功能开关：默认关闭）。
+å¹¶è¡Œå½±å“è¯„ä¼°/é—¨ç¦ï¼ˆå¿…é¡»åŽŸæ–‡ä¿ç•™ï¼‰ï¼š
+æœ¬æ¬¡å˜æ›´åš å¹¶è¡Œå½±å“è¯„ä¼°ï¼šæ˜¯å¦è§¦åŠçƒ­åŒºï¼ˆhotspotï¼šå†²çªé«˜å‘æ ¸å¿ƒæ¨¡å—ï¼Œå¦‚è®¢å•/æ”¯ä»˜/æƒé™/ç»“ç®—/åº“å­˜/çŠ¶æ€æœºï¼‰ï¼Ÿæ˜¯å¦æ¶‰åŠè¿ç§»ï¼ˆmigrationï¼šæ•°æ®åº“å˜æ›´ï¼‰ï¼Ÿæ˜¯å¦æ¶‰åŠå¥‘çº¦ï¼ˆcontractï¼šAPI/äº‹ä»¶/DB çº¦å®šï¼‰ç ´åï¼Ÿ
+è‹¥è§¦åŠçƒ­åŒºï¼šè¦æ±‚ PR æ›´å°ï¼ŒæŒ‡å®š owner å®¡æŸ¥ï¼ˆå»ºè®®å¯ç”¨ CODEOWNERSï¼šä»£ç æ‰€æœ‰è€…è§„åˆ™ï¼‰ã€‚
+è‹¥æ¶‰åŠè¿ç§»ï¼šå¿…é¡»é‡‡ç”¨ expand/contractï¼ˆæ‰©å±•/æ”¶ç¼©ï¼šå…ˆå…¼å®¹å†æ”¶æ•›ï¼‰å¹¶ç»™å‡ºå›žå¡«ï¼ˆbackfillï¼šæ•°æ®å›žå¡«ï¼‰ä¸Žå›žæ»šç­–ç•¥ã€‚
+è‹¥æ¶‰åŠå¥‘çº¦ç ´åï¼šå¿…é¡»ç»™å…¼å®¹çª—å£ï¼ˆcompatibility windowï¼šæ–°æ—§å¹¶è¡ŒæœŸï¼‰ä¸Žå¼ƒç”¨æ—¶é—´ç‚¹ï¼ˆdeprecationï¼šå¼ƒç”¨è®¡åˆ’ï¼‰ã€‚
+æ˜Žç¡®é—¨ç¦ï¼šfast_check å¿…è¿‡ï¼›é‡Œç¨‹ç¢‘/çƒ­åŒº/è¿ç§»å˜æ›´å¿…é¡» full_check å¿…è¿‡ï¼›æœªå®ŒæˆåŠŸèƒ½å¿…é¡» feature flagï¼ˆåŠŸèƒ½å¼€å…³ï¼šé»˜è®¤å…³é—­ï¼‰ã€‚
 
 ## W2: WebGPT HITL Bridge (Copy/Paste + File Sink)
 - ChangeLevel: L2
@@ -116,7 +91,7 @@
   - `ingest_response(run_id, task_id, response_text)` writes `gpt_response.md` and conditionally `codex_task.md`
   - events include `WAIT_GPT`, `PROMPT_EXPORTED`, `RESPONSE_INGESTED`, `PARSE_FAILED`
 - Parse mode:
-  - `strict`: requires `# Codex 指令书` section
+  - `strict`: requires `# Codex æŒ‡ä»¤ä¹¦` section
   - `lenient`: uses full response as `codex_task.md`
 - Feature flag:
   - `enable_web_gpt_hitl: false` (default off)
@@ -168,12 +143,12 @@
 - Contract:
   - output `codex_result.json` must pass W1 schema validator
 
-## 并行影响评估/门禁（原文保留）
-本次变更做 并行影响评估：是否触及热区（hotspot：冲突高发核心模块，如订单/支付/权限/结算/库存/状态机）？是否涉及迁移（migration：数据库变更）？是否涉及契约（contract：API/事件/DB 约定）破坏？
-若触及热区：要求 PR 更小，指定 owner 审查（建议启用 CODEOWNERS：代码所有者规则）。
-若涉及迁移：必须采用 expand/contract（扩展/收缩：先兼容再收敛）并给出回填（backfill：数据回填）与回滚策略。
-若涉及契约破坏：必须给兼容窗口（compatibility window：新旧并行期）与弃用时间点（deprecation：弃用计划）。
-明确门禁：fast_check 必过；里程碑/热区/迁移变更必须 full_check 必过；未完成功能必须 feature flag（功能开关：默认关闭）。
+## å¹¶è¡Œå½±å“è¯„ä¼°/é—¨ç¦ï¼ˆåŽŸæ–‡ä¿ç•™ï¼‰
+æœ¬æ¬¡å˜æ›´åš å¹¶è¡Œå½±å“è¯„ä¼°ï¼šæ˜¯å¦è§¦åŠçƒ­åŒºï¼ˆhotspotï¼šå†²çªé«˜å‘æ ¸å¿ƒæ¨¡å—ï¼Œå¦‚è®¢å•/æ”¯ä»˜/æƒé™/ç»“ç®—/åº“å­˜/çŠ¶æ€æœºï¼‰ï¼Ÿæ˜¯å¦æ¶‰åŠè¿ç§»ï¼ˆmigrationï¼šæ•°æ®åº“å˜æ›´ï¼‰ï¼Ÿæ˜¯å¦æ¶‰åŠå¥‘çº¦ï¼ˆcontractï¼šAPI/äº‹ä»¶/DB çº¦å®šï¼‰ç ´åï¼Ÿ
+è‹¥è§¦åŠçƒ­åŒºï¼šè¦æ±‚ PR æ›´å°ï¼ŒæŒ‡å®š owner å®¡æŸ¥ï¼ˆå»ºè®®å¯ç”¨ CODEOWNERSï¼šä»£ç æ‰€æœ‰è€…è§„åˆ™ï¼‰ã€‚
+è‹¥æ¶‰åŠè¿ç§»ï¼šå¿…é¡»é‡‡ç”¨ expand/contractï¼ˆæ‰©å±•/æ”¶ç¼©ï¼šå…ˆå…¼å®¹å†æ”¶æ•›ï¼‰å¹¶ç»™å‡ºå›žå¡«ï¼ˆbackfillï¼šæ•°æ®å›žå¡«ï¼‰ä¸Žå›žæ»šç­–ç•¥ã€‚
+è‹¥æ¶‰åŠå¥‘çº¦ç ´åï¼šå¿…é¡»ç»™å…¼å®¹çª—å£ï¼ˆcompatibility windowï¼šæ–°æ—§å¹¶è¡ŒæœŸï¼‰ä¸Žå¼ƒç”¨æ—¶é—´ç‚¹ï¼ˆdeprecationï¼šå¼ƒç”¨è®¡åˆ’ï¼‰ã€‚
+æ˜Žç¡®é—¨ç¦ï¼šfast_check å¿…è¿‡ï¼›é‡Œç¨‹ç¢‘/çƒ­åŒº/è¿ç§»å˜æ›´å¿…é¡» full_check å¿…è¿‡ï¼›æœªå®ŒæˆåŠŸèƒ½å¿…é¡» feature flagï¼ˆåŠŸèƒ½å¼€å…³ï¼šé»˜è®¤å…³é—­ï¼‰ã€‚
 
 ## W4 / Stage=CodexTask: HITL Flow Chain + Manual WebGPT Bridge
 - ChangeLevel: L2 (flow orchestration hotspot)
@@ -213,10 +188,17 @@
   - parses collected count and fails on mismatch.
 - Gate integration: `scripts/fast_check.ps1` now blocks on collected count mismatch.
 
-## L1 (2026-03-02): Collect Consistency Gate Semantics
+## L1 (2026-03-01): Gate Usage Update for Clean Baseline
 - Scope: `scripts/**`, `docs/**` only.
-- Default behavior: `fast_check` runs collect-consistency in single-directory mode for current worktree.
-- Multi-directory behavior: cross-worktree consistency check is opt-in via `COLLECT_DIRS` (semicolon-separated paths).
-- Anchor:
-  - tag: `m3-mergeprep-pass-20260302`
-  - commit: `e8e4542`
+- This gate update is structural only and does not change runtime business logic.
+- Why:
+  - avoid false failures caused by dirty/polluted directories;
+  - prefer clean `main_sync` worktree for acceptance.
+- Usage:
+  - default fast check compares collect results for current directory only;
+  - use `COLLECT_DIRS` to expand cross-directory checks (semicolon-separated paths);
+  - use `COLLECT_EXCLUDE` to skip selected paths/names.
+- Example:
+  - `$env:COLLECT_DIRS='D:/智能体工作流_main_sync;D:/智能体工作流_w1_contract;D:/智能体工作流_w2_bridge;D:/智能体工作流_w3_codexcli;D:/智能体工作流_w4_flow'`
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1`
+- Evidence path: `reports/preflight/<yyyyMMdd_HHmmss_rand>/`.
