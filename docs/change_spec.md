@@ -1,4 +1,4 @@
-# Change Spec
+﻿# Change Spec
 
 ## W2: Standards Engine
 - ChangeLevel: L2
@@ -47,3 +47,18 @@
   3) produce a valid `artifacts/codex_result.json`
   4) ingest and validate result contract
   5) transition to `DONE`
+
+## L1 (2026-03-01): Gate Usage Update for Clean Baseline
+- Scope: `scripts/**`, `docs/**` only.
+- This gate update is structural only and does not change runtime business logic.
+- Why:
+  - avoid false failures caused by dirty/polluted directories;
+  - prefer clean `main_sync` worktree for acceptance.
+- Usage:
+  - default fast check compares collect results for current directory only;
+  - use `COLLECT_DIRS` to expand cross-directory checks (semicolon-separated paths);
+  - use `COLLECT_EXCLUDE` to skip selected paths/names.
+- Example:
+  - `$env:COLLECT_DIRS='D:/智能体工作流_main_sync;D:/智能体工作流_w1_contract;D:/智能体工作流_w2_bridge;D:/智能体工作流_w3_codexcli;D:/智能体工作流_w4_flow'`
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1`
+- Evidence path: `reports/preflight/<yyyyMMdd_HHmmss_rand>/`.
