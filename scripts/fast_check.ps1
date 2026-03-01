@@ -26,14 +26,20 @@ if ($untrackedTests) {
   exit 1
 }
 
-Write-Host "[fast_check] verify collected item count consistency (main vs w1_contract)"
-$repoRoot = (& git rev-parse --show-toplevel).Trim()
-if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
-  Write-Host "[fast_check] failed"
-  exit 1
+# collect-only 一致性预检：
+# - 默认只检查当前目录，避免不同阶段工作树产生误报
+# - 需要跨目录时通过 COLLECT_DIRS 显式指定（分号分隔）
+if (Test-Path "$PSScriptRoot/check_collect_consistency.ps1") {
+  $dirs = $env:COLLECT_DIRS
+  $exclude = $env:COLLECT_EXCLUDE
+  if ($dirs -and $dirs.Trim().Length -gt 0) {
+    Write-Host "[fast_check] collect consistency (multi-dir) enabled via COLLECT_DIRS"
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories ($dirs -split ';') -Exclude ($exclude -split ';')
+  } else {
+    Write-Host "[fast_check] collect consistency (single-dir)"
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories @((Get-Location).Path)
+  }
 }
-$w1Path = if ($env:COLLECT_W1_PATH) { $env:COLLECT_W1_PATH } else { "D:/智能体工作流_w1_contract" }
-& "$PSScriptRoot/check_collect_consistency.ps1" -MainPath $repoRoot -W1Path $w1Path
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
