@@ -1,0 +1,50 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "events.v0.schema.json",
+  "title": "events v0 (jsonl logical view)",
+  "description": "Logical schema for events.jsonl where each line is one event object.",
+  "type": "array",
+  "items": {
+    "anyOf": [
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ts", "type", "run_id", "task_id", "payload"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0" },
+          "ts": { "type": "string", "format": "date-time" },
+          "type": { "type": "string" },
+          "run_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "payload": { "type": "object" }
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ts", "event_type", "run_id", "task_id", "payload"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0" },
+          "ts": { "type": "string", "format": "date-time" },
+          "event_type": { "type": "string" },
+          "run_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "payload": { "type": "object" }
+        }
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["timestamp", "event_type", "run_id", "task_id", "data"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "event_type": { "type": "string" },
+          "run_id": { "type": "string" },
+          "task_id": { "type": "string" },
+          "data": { "type": "object" }
+        }
+      }
+    ]
+  }
+}

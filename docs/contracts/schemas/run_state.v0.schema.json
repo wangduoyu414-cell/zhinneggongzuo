@@ -1,0 +1,24 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "run_state.v0.schema.json",
+  "title": "run_state v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["run_id", "task_id", "status", "updated_at"],
+  "properties": {
+    "contract_version": { "type": "string", "const": "0" },
+    "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["PENDING", "RUNNING", "WAIT_GPT", "WAIT_CODEX", "DONE", "FAILED", "CANCELED"]
+    },
+    "attempts": { "type": "integer" },
+    "max_retries": { "type": "integer" },
+    "consecutive_failures": { "type": "integer" },
+    "stop_the_line": { "type": "boolean" },
+    "last_error": { "anyOf": [{ "type": "string" }, { "type": "null" }] },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "meta": { "type": "object", "additionalProperties": true }
+  }
+}

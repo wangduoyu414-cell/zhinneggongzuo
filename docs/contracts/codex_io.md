@@ -1,25 +1,42 @@
-# Codex IO Contract (W4)
+﻿# Codex IO Contract
 
-## Task Directory Layout
+## Paths
+- Run root: `<runs_root>/<run_id>/`
+- Task root: `<runs_root>/<run_id>/<task_id>/`
 
-Each task uses a dedicated workspace:
+Run-level files:
+- `codex_task.md`
+- `codex_result.json`
+- `run_state.json`
+- `events.jsonl`
 
-`<runs_root>/<run_id>/<task_id>/`
+Task-level files:
+- `<task_id>/run_state.json`
+- `<task_id>/events.jsonl`
 
-Files:
-- `run_state.json`: mutable task state (`PENDING/RUNNING/DONE/FAILED`, retries, stop-the-line).
-- `events.jsonl`: append-only event stream, one JSON object per line.
-- `codex_task.md`: task prompt emitted for the executor.
-- `artifacts/commands.log`: command invocation and captured output.
-- `artifacts/patch_summary.md`: summary extracted from executor output.
-- `artifacts/codex_result.json`: result payload to ingest and validate.
+## Result Contract
+- Schema: `docs/contracts/schemas/codex_result.v0.schema.json`
+- Validator: `core.codex_result_validation.validate_codex_result(...)`
 
-## Result Validation
+## Run State Contract (v0)
+- Schema: `docs/contracts/schemas/run_state.v0.schema.json`
+- Validator: `core.run_state_event_validation.validate_run_state(...)`
+- `contract_version` optional; if present must be `"0"`.
+- `updated_at` is ISO8601 string.
+- Strict mode: `additionalProperties=false`.
+- Compatibility: union shape allows current and legacy run_state fields in v0.
 
-`artifacts/codex_result.json` must satisfy schema:
-- `docs/contracts/schemas/codex_result.v0.schema.json`
+## Event Contract (v0)
+- Per-line schema: `docs/contracts/schemas/event.v0.schema.json`
+- JSONL logical container schema: `docs/contracts/schemas/events.v0.schema.json`
+- Validators:
+  - `core.run_state_event_validation.validate_event(...)`
+  - `core.run_state_event_validation.validate_events(...)`
+  - `core.run_state_event_validation.validate_events_jsonl(path)`
+- Storage format: `events.jsonl`, one JSON object per line.
+- Compatibility: union shape allows current (`ts/type/payload`) and legacy (`timestamp/event_type/data`) event shape in v0.
 
-Validation entrypoint:
-- `core.codex_result_validation.validate_codex_result(...)`
-
-Invalid results must transition task state to `FAILED`.
+## Error Reporting
+- Validation returns path-style errors, for example:
+  - `payload.status: missing required field`
+  - `payload.events[2].type: unknown field`

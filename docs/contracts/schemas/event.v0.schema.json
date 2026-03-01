@@ -1,0 +1,46 @@
+﻿{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "event.v0.schema.json",
+  "title": "event v0",
+  "anyOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ts", "type", "run_id", "task_id", "payload"],
+      "properties": {
+        "contract_version": { "type": "string", "const": "0" },
+        "ts": { "type": "string", "format": "date-time" },
+        "type": { "type": "string" },
+        "run_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "payload": { "type": "object", "additionalProperties": true }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ts", "event_type", "run_id", "task_id", "payload"],
+      "properties": {
+        "contract_version": { "type": "string", "const": "0" },
+        "ts": { "type": "string", "format": "date-time" },
+        "event_type": { "type": "string" },
+        "run_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "payload": { "type": "object", "additionalProperties": true }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timestamp", "event_type", "run_id", "task_id", "data"],
+      "properties": {
+        "contract_version": { "type": "string", "const": "0" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "event_type": { "type": "string" },
+        "run_id": { "type": "string" },
+        "task_id": { "type": "string" },
+        "data": { "type": "object", "additionalProperties": true }
+      }
+    }
+  ]
+}
