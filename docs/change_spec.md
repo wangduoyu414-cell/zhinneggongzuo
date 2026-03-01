@@ -202,3 +202,13 @@
   - main vs w1 `pytest --collect-only` test-file set is consistent.
   - `python -m pytest -q` passes on both main and w1.
 - Evidence: `reports/preflight/<timestamp>/`.
+
+## Test Suite Consistency Upgrade (2026-03-01)
+- Stage: CodexTask
+- ChangeLevel: L1
+- Upgrade: acceptance moved from "test file set consistent" to "pytest collected item count consistent".
+- Added script: `scripts/check_collect_consistency.ps1`
+  - runs `pytest -q --collect-only` on main and w1_contract,
+  - records `main_collect.txt`, `w1_collect.txt`, `collected_diff.txt`, `summary.md` under `reports/preflight/<timestamp>/`,
+  - parses collected count and fails on mismatch.
+- Gate integration: `scripts/fast_check.ps1` now blocks on collected count mismatch.
