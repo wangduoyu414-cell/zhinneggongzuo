@@ -8,10 +8,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 Write-Host "[fast_check] compileall"
-<<<<<<< HEAD
-python -m compileall .
-=======
-python -m compileall -q .
+python -X utf8 -m compileall -q .
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
@@ -45,7 +42,6 @@ if ($env:COLLECT_EXCLUDE) {
 $pythonCmd = if ($env:PYTHON) { $env:PYTHON } else { "python" }
 Write-Host "[fast_check] verify collected item consistency (default: current directory only)"
 & "$PSScriptRoot/check_collect_consistency.ps1" -Directories $collectDirs -Exclude $collectExclude -PythonPath $pythonCmd
->>>>>>> e83757a (chore(gate): add collect-only consistency preflight)
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
@@ -53,3 +49,4 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "[fast_check] done"
 exit 0
+
