@@ -1,0 +1,46 @@
+﻿name: fast_check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  fast_check:
+    name: fast_check
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Create venv and install dependencies
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe --version
+          if (Test-Path .\requirements.txt) {
+            .\.venv\Scripts\python.exe -m pip install --upgrade pip
+            .\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
+          } else {
+            Write-Host "requirements.txt not found, skip dependency install"
+          }
+
+      - name: Run fast_check script
+        shell: pwsh
+        run: |
+          Remove-Item Env:COLLECT_DIRS -ErrorAction SilentlyContinue
+          . .\.venv\Scripts\Activate.ps1
+          python --version
+          python -m pytest --version
+          .\scripts\fast_check.ps1
+          $rc = $LASTEXITCODE
+          Write-Host "fast_check exit code: $rc"
+          if ($rc -ne 0) { exit $rc }
