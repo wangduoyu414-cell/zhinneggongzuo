@@ -26,22 +26,21 @@ if ($untrackedTests) {
   exit 1
 }
 
-$repoRoot = (& git rev-parse --show-toplevel).Trim()
-if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
-  Write-Host "[fast_check] failed"
-  exit 1
-}
-$collectDirs = @($repoRoot)
-if ($env:COLLECT_DIRS) {
-  $collectDirs = @($env:COLLECT_DIRS -split ';' | Where-Object { $_ -and $_.Trim().Length -gt 0 })
-}
-$collectExclude = @()
-if ($env:COLLECT_EXCLUDE) {
-  $collectExclude = @($env:COLLECT_EXCLUDE -split ';' | Where-Object { $_ -and $_.Trim().Length -gt 0 })
-}
 $pythonCmd = if ($env:PYTHON) { $env:PYTHON } else { "python" }
-Write-Host "[fast_check] verify collected item consistency (default: current directory only)"
-& "$PSScriptRoot/check_collect_consistency.ps1" -Directories $collectDirs -Exclude $collectExclude -PythonPath $pythonCmd
+# collect-only consistency preflight:
+# - default checks current directory only
+# - set COLLECT_DIRS to enable cross-worktree compare
+if (Test-Path "$PSScriptRoot/check_collect_consistency.ps1") {
+  $dirs = $env:COLLECT_DIRS
+  $exclude = $env:COLLECT_EXCLUDE
+  if ($dirs -and $dirs.Trim().Length -gt 0) {
+    Write-Host "[fast_check] collect consistency (multi-dir) enabled via COLLECT_DIRS"
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories ($dirs -split ';') -Exclude ($exclude -split ';') -PythonPath $pythonCmd
+  } else {
+    Write-Host "[fast_check] collect consistency (single-dir)"
+    & "$PSScriptRoot/check_collect_consistency.ps1" -Directories @((Get-Location).Path) -PythonPath $pythonCmd
+  }
+}
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
