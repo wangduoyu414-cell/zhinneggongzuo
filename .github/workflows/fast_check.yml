@@ -1,42 +1,36 @@
 name: fast_check
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+  push:
+    branches: ["main"]
 
 jobs:
   fast_check:
-    name: fast_check
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python 3.13
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
 
-      - name: Create venv and install dependencies
+      - name: Create venv and install deps (if any)
         shell: pwsh
         run: |
           python -m venv .venv
           .\.venv\Scripts\python.exe --version
+          .\.venv\Scripts\python.exe -m pip --version
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
           if (Test-Path .\requirements.txt) {
-            .\.venv\Scripts\python.exe -m pip install --upgrade pip
             .\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
-          } else {
-            Write-Host "requirements.txt not found, skip dependency install"
           }
 
-      - name: Run fast_check script
+      - name: Run fast_check
         shell: pwsh
         run: |
-          .\.venv\Scripts\python.exe --version
           powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1
           $rc = $LASTEXITCODE
           Write-Host "fast_check exit code: $rc"
