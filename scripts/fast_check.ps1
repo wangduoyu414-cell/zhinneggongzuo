@@ -26,14 +26,8 @@ if ($untrackedTests) {
   exit 1
 }
 
-Write-Host "[fast_check] verify collected item count consistency (main vs w1_contract)"
-$repoRoot = (& git rev-parse --show-toplevel).Trim()
-if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
-  Write-Host "[fast_check] failed"
-  exit 1
-}
-$w1Path = if ($env:COLLECT_W1_PATH) { $env:COLLECT_W1_PATH } else { "D:/智能体工作流_w1_contract" }
-& "$PSScriptRoot/check_collect_consistency.ps1" -MainPath $repoRoot -W1Path $w1Path
+Write-Host "[fast_check] verify collected item count consistency"
+& "$PSScriptRoot/check_collect_consistency.ps1"
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
