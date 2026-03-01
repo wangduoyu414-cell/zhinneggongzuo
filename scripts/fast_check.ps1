@@ -26,14 +26,22 @@ if ($untrackedTests) {
   exit 1
 }
 
-Write-Host "[fast_check] verify collected item count consistency (main vs w1_contract)"
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 if ($LASTEXITCODE -ne 0 -or -not $repoRoot) {
   Write-Host "[fast_check] failed"
   exit 1
 }
-$w1Path = if ($env:COLLECT_W1_PATH) { $env:COLLECT_W1_PATH } else { "D:/智能体工作流_w1_contract" }
-& "$PSScriptRoot/check_collect_consistency.ps1" -MainPath $repoRoot -W1Path $w1Path
+$collectDirs = @($repoRoot)
+if ($env:COLLECT_DIRS) {
+  $collectDirs = @($env:COLLECT_DIRS -split ';' | Where-Object { $_ -and $_.Trim().Length -gt 0 })
+}
+$collectExclude = @()
+if ($env:COLLECT_EXCLUDE) {
+  $collectExclude = @($env:COLLECT_EXCLUDE -split ';' | Where-Object { $_ -and $_.Trim().Length -gt 0 })
+}
+$pythonCmd = if ($env:PYTHON) { $env:PYTHON } else { "python" }
+Write-Host "[fast_check] verify collected item consistency (default: current directory only)"
+& "$PSScriptRoot/check_collect_consistency.ps1" -Directories $collectDirs -Exclude $collectExclude -PythonPath $pythonCmd
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE

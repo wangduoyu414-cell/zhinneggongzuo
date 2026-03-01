@@ -187,3 +187,18 @@
   - records `main_collect.txt`, `w1_collect.txt`, `collected_diff.txt`, `summary.md` under `reports/preflight/<timestamp>/`,
   - parses collected count and fails on mismatch.
 - Gate integration: `scripts/fast_check.ps1` now blocks on collected count mismatch.
+
+## L1 (2026-03-01): Gate Usage Update for Clean Baseline
+- Scope: `scripts/**`, `docs/**` only.
+- This gate update is structural only and does not change runtime business logic.
+- Why:
+  - avoid false failures caused by dirty/polluted directories;
+  - prefer clean `main_sync` worktree for acceptance.
+- Usage:
+  - default fast check compares collect results for current directory only;
+  - use `COLLECT_DIRS` to expand cross-directory checks (semicolon-separated paths);
+  - use `COLLECT_EXCLUDE` to skip selected paths/names.
+- Example:
+  - `$env:COLLECT_DIRS='D:/智能体工作流_main_sync;D:/智能体工作流_w1_contract;D:/智能体工作流_w2_bridge;D:/智能体工作流_w3_codexcli;D:/智能体工作流_w4_flow'`
+  - `powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1`
+- Evidence path: `reports/preflight/<yyyyMMdd_HHmmss_rand>/`.
