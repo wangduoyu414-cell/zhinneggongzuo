@@ -1,0 +1,36 @@
+version: 1
+
+change_levels:
+  L0:
+    description: "Docs/tests-only style changes"
+    gate_profile: fast
+  L1:
+    description: "Low-risk implementation change"
+    gate_profile: full
+  L2:
+    description: "Spec or behavior extension with guarded rollout"
+    gate_profile: full
+  L3:
+    description: "High-risk / stop-the-line candidate"
+    gate_profile: strict
+    stop_the_line: true
+
+gates:
+  profiles:
+    fast:
+      - fast_check
+    full:
+      - fast_check
+      - full_check
+    strict:
+      - fast_check
+      - full_check
+
+output_dirs:
+  reports: reports
+  runs: reports/runs
+  codex_tasks: reports/runs/codex_tasks
+
+defaults:
+  template: codex_task.txt
+  include_parallel_impact_section: true

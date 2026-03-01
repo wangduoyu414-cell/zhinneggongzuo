@@ -1,1 +1,4 @@
-﻿enable_hitl: false
+enable_hitl: false
+enable_standards_engine: false
+enable_true_concurrency: false
+enable_web_gpt_hitl: false

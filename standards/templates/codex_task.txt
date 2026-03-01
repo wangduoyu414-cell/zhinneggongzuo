@@ -1,0 +1,16 @@
+# Codex Task
+ChangeLevel: {change_level}
+GateProfile: {gate_profile}
+Gates: {gates_csv}
+
+## Scope
+Allowed paths: {allowed_paths}
+Forbidden paths: {forbidden_paths}
+
+## Golden Path
+1) 启用 standards engine（模块函数调用）
+2) 输出 gates 列表
+3) 生成可复制的 codex_task 文本
+
+### 并行影响评估/门禁（原文保留）
+{parallel_impact_assessment}

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "codex_result.v0.schema.json",
+  "title": "codex_result v0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "result",
+    "artifacts"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0"
+    },
+    "result": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "meta": {
+      "type": "object"
+    }
+  }
+}
