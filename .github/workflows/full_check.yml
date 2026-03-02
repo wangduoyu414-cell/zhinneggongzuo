@@ -2,8 +2,9 @@ name: full_check
 
 on:
   pull_request:
+    branches: [ main ]
   push:
-    branches: ["main"]
+    branches: [ main ]
 
 jobs:
   full_check:
@@ -17,21 +18,29 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Create venv and install deps (if any)
+      - name: Create venv and install dependencies
         shell: pwsh
         run: |
           python -m venv .venv
-          .\.venv\Scripts\python.exe --version
-          .\.venv\Scripts\python.exe -m pip --version
           .\.venv\Scripts\python.exe -m pip install --upgrade pip
           if (Test-Path .\requirements.txt) {
             .\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
+          } else {
+            throw "requirements.txt not found"
           }
 
-      - name: Run full_check
+      - name: Run full_check (venv)
         shell: pwsh
         run: |
-          powershell -ExecutionPolicy Bypass -File .\scripts\full_check.ps1
-          $rc = $LASTEXITCODE
-          Write-Host "full_check exit code: $rc"
-          if ($rc -ne 0) { exit $rc }
+          # 防止环境变量污染（比如误开多目录对比）
+          Remove-Item Env:COLLECT_DIRS -ErrorAction SilentlyContinue
+
+          # 激活 venv（关键）
+          . .\.venv\Scripts\Activate.ps1
+
+          # 诊断输出：确认用的是 venv python 且 pytest 可用
+          python --version
+          python -m pytest --version
+
+          # 关键：不要用 powershell -File 开新进程，直接在当前 pwsh 会话跑脚本
+          .\scripts\full_check.ps1
