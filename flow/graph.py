@@ -78,3 +78,23 @@ def run_serial_flow(
         return task_states
     finally:
         release(run_dir, lock_owner)
+
+
+def resume_execute_once(
+    run_id: str,
+    task_id: str,
+    *,
+    runs_root: Path = Path("reports") / "runs",
+) -> dict[str, Any]:
+    manager = TaskManager(run_id=run_id, task_id=task_id, runs_root=runs_root)
+    manager.ensure_layout()
+    codex_task_path = manager.task_dir / "codex_task.md"
+    if not codex_task_path.exists():
+        return {"status": "MISSING_CODEX_TASK", "result_path": str(manager.artifacts_dir / "codex_result.json")}
+
+    output = run_codex(manager.task_dir, codex_task_path, dry_run=False)
+    return {
+        "status": "EXECUTED",
+        "return_code": int(output.get("return_code", 0)),
+        "result_path": str(manager.artifacts_dir / "codex_result.json"),
+    }
