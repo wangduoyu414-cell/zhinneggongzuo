@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from core.events_log import append_event
 from core.file_io import atomic_write_json, atomic_write_text, read_json, read_text
 
 RUNS_ROOT = Path("reports") / "runs"
@@ -35,6 +36,13 @@ def read_codex_task(run_id: str, runs_root: Path = RUNS_ROOT) -> str:
 def write_codex_result(run_id: str, payload: dict[str, Any], runs_root: Path = RUNS_ROOT) -> Path:
     path = get_codex_result_path(run_id, runs_root)
     atomic_write_json(path, payload)
+    append_event(
+        run_id,
+        {
+            "type": "codex_result_written",
+            "path": str(path),
+        },
+    )
     return path
 
 

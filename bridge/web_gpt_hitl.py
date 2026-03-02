@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from core.events_log import append_event
 from core.file_io import atomic_write_text
 
 RUNS_ROOT = Path("reports") / "runs"
@@ -29,6 +30,14 @@ def emit_prompt(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) -> Path:
     prompt_path = artifacts_dir / PROMPT_FILENAME
     prompt = _build_prompt(run_id=run_id, task_id=task_id, artifacts_dir=artifacts_dir)
     atomic_write_text(prompt_path, prompt, encoding="utf-8")
+    append_event(
+        run_id,
+        {
+            "type": "hitl_prompt_emitted",
+            "task_id": task_id,
+            "prompt_path": str(prompt_path),
+        },
+    )
     return prompt_path
 
 
@@ -56,6 +65,16 @@ def ingest_response(
     warnings: list[str] = []
     if not text.strip():
         warnings.append("response text is empty")
+
+    append_event(
+        run_id,
+        {
+            "type": "hitl_response_ingested",
+            "task_id": task_id,
+            "response_path": str(response_path),
+            "response_char_count": len(text),
+        },
+    )
 
     return {
         "response_path": str(response_path),
