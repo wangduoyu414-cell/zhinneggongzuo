@@ -1,18 +1,20 @@
-﻿param(
-  [string]$Timestamp
+param(
+  [string]$PythonPath = 'python',
+  [string]$Timestamp,
+  [string]$OutputRoot
 )
 
 $ErrorActionPreference = 'Stop'
 
-function Get-RepoRoot {
+function Resolve-RepoRoot {
   param([string]$Path)
   Push-Location $Path
   try {
-    $root = (& git rev-parse --show-toplevel).Trim()
+    $root = (& git rev-parse --show-toplevel 2>$null).Trim()
     if (-not $root) {
-      throw 'unable to resolve git toplevel'
+      throw "not a git worktree: $Path"
     }
-    return $root
+    return (Resolve-Path $root).Path
   }
   finally {
     Pop-Location
@@ -30,12 +32,12 @@ function Resolve-CollectDirs {
   $seen = @{}
   foreach ($part in ($Raw -split '[;,]')) {
     $dir = $part.Trim()
-    if (-not $dir) {
-      continue
-    }
+    if (-not $dir) { continue }
+
     if (-not (Test-Path $dir)) {
       throw "collect directory not found: $dir"
     }
+
     $resolved = (Resolve-Path $dir).Path
     if (-not $seen.ContainsKey($resolved)) {
       $seen[$resolved] = $true
@@ -58,7 +60,7 @@ function Invoke-CollectOnly {
 
   Push-Location $Workdir
   try {
-    $lines = & python -m pytest -q --collect-only 2>&1
+    $lines = & $PythonPath -m pytest -q --collect-only 2>&1
     $exitCode = $LASTEXITCODE
     $lines | Set-Content -Path $OutputFile -Encoding utf8
     if ($exitCode -ne 0) {
@@ -71,7 +73,7 @@ function Invoke-CollectOnly {
   }
 }
 
-function Get-CollectedCount {
+function Parse-CollectedCount {
   param([string[]]$Lines)
 
   for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
@@ -84,52 +86,78 @@ function Get-CollectedCount {
     }
   }
 
-  throw 'unable to parse collected item count from pytest output'
+  throw 'unable to parse collected line from pytest output'
+}
+
+function Get-CollectedCount {
+  param([string[]]$Lines)
+  return (Parse-CollectedCount -Lines $Lines)
 }
 
 function Get-NodeIds {
   param([string[]]$Lines)
-  return @($Lines | Where-Object { $_ -match '^(tests/|reports/).+::' })
+
+  # 兼容 Windows/Unix 路径与 pytest 输出格式
+  $rx = '^(tests/|reports/|\.\/tests\/|\.\\tests\\|tests\\|reports\\).+::'
+  return @($Lines | Where-Object { $_ -match $rx } | ForEach-Object { ([string]$_).Trim() })
 }
 
-$repoRoot = Get-RepoRoot -Path $PSScriptRoot
+# -------- Main --------
+
+$repoRoot = Resolve-RepoRoot -Path (Get-Location).Path
+
 if (-not $Timestamp) {
-  $Timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $Timestamp = (Get-Date -Format 'yyyyMMdd_HHmmss') + '_' + (Get-Random -Minimum 1000 -Maximum 9999)
 }
 
-$reportDir = Join-Path $repoRoot "reports/preflight/$Timestamp"
+if (-not $OutputRoot) {
+  $OutputRoot = Join-Path $repoRoot 'reports/preflight'
+}
+
+$reportDir = Join-Path $OutputRoot $Timestamp
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
-$Timestamp | Set-Content -Path (Join-Path $repoRoot 'reports/preflight/LATEST.txt') -Encoding utf8
+
+# 记录 LATEST
+$latestPath = Join-Path $OutputRoot 'LATEST.txt'
+$Timestamp | Set-Content -Path $latestPath -Encoding utf8
 
 $collectDirs = @(Resolve-CollectDirs -Raw $env:COLLECT_DIRS)
 $isMulti = $collectDirs.Count -gt 1
 $mode = if ($isMulti) { 'multi-dir' } else { 'single-dir' }
+
 Write-Host "[collect_check] mode=$mode"
 Write-Host "[collect_check] dirs=$($collectDirs -join ';')"
+Write-Host "[collect_check] python=$PythonPath"
+Write-Host "[collect_check] report=$reportDir"
 
 $records = @()
 for ($i = 0; $i -lt $collectDirs.Count; $i++) {
   $dir = $collectDirs[$i]
   $label = if ($i -eq 0) { 'main' } elseif ($i -eq 1) { 'w1' } else { "dir$($i + 1)" }
+
   $collectPath = Join-Path $reportDir ("{0}_collect.txt" -f $label)
   $lines = Invoke-CollectOnly -Workdir $dir -OutputFile $collectPath
+
   $records += [pscustomobject]@{
-    Label = $label
-    Dir = $dir
+    Label       = $label
+    Dir         = $dir
     CollectPath = $collectPath
-    Count = Get-CollectedCount -Lines $lines
-    NodeIds = Get-NodeIds -Lines $lines
+    Count       = Get-CollectedCount -Lines $lines
+    NodeIds     = Get-NodeIds -Lines $lines
   }
 }
 
 $diffPath = Join-Path $reportDir 'collected_diff.txt'
 $summaryPath = Join-Path $reportDir 'summary.md'
 
+# ---- single-dir ----
 if (-not $isMulti) {
   $single = $records[0]
+
   @(
     'mode=single-dir'
     "dir=$($single.Dir)"
+    "collect_path=$($single.CollectPath)"
     "collected=$($single.Count)"
     'status=PASS'
     'reason=single directory collect-only succeeded'
@@ -141,16 +169,20 @@ if (-not $isMulti) {
     "- timestamp: $Timestamp"
     '- mode: single-dir'
     "- directory: $($single.Dir)"
+    "- python: $PythonPath"
     "- collected: $($single.Count)"
     "- diff file: $diffPath"
   ) | Set-Content -Path $summaryPath -Encoding utf8
 
   Write-Host "[collect_check] PASS: single-dir collected=$($single.Count)"
+  Write-Host "[collect_check] see $diffPath"
   exit 0
 }
 
+# ---- multi-dir ----
 $baseline = $records[0]
 $allMatch = $true
+
 $diffLines = @(
   'mode=multi-dir'
   "baseline_label=$($baseline.Label)"
@@ -164,15 +196,19 @@ foreach ($record in $records) {
 }
 
 foreach ($record in $records | Select-Object -Skip 1) {
-  $onlyBase = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru | Where-Object { $_ -in $baseline.NodeIds }
-  $onlyOther = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru | Where-Object { $_ -in $record.NodeIds }
+  $onlyBase  = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru |
+               Where-Object { $_ -in $baseline.NodeIds }
+  $onlyOther = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru |
+               Where-Object { $_ -in $record.NodeIds }
 
   if (($baseline.Count -ne $record.Count) -or $onlyBase.Count -gt 0 -or $onlyOther.Count -gt 0) {
     $allMatch = $false
     $diffLines += "mismatch_pair=$($baseline.Label),$($record.Label)"
+
     if ($baseline.Count -ne $record.Count) {
       $diffLines += "count_mismatch[$($record.Label)]=$($baseline.Count),$($record.Count)"
     }
+
     if ($onlyBase.Count -gt 0) {
       $diffLines += "only_in_$($baseline.Label)_vs_$($record.Label):"
       $diffLines += ($onlyBase | Select-Object -First 30)
@@ -192,6 +228,7 @@ $summary = @(
   ''
   "- timestamp: $Timestamp"
   '- mode: multi-dir'
+  "- python: $PythonPath"
   "- directories: $($collectDirs -join ';')"
   "- diff file: $diffPath"
 )
@@ -214,4 +251,6 @@ if ($records.Count -ge 2) {
 else {
   Write-Host "[collect_check] PASS: collected=$($records[0].Count)"
 }
+
+Write-Host "[collect_check] see $diffPath"
 exit 0

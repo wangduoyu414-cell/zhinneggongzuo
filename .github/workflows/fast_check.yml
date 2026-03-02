@@ -1,4 +1,8 @@
+= fix/collect-consistency-default-single
 ﻿name: fast_check
+=
+name: fast_check
+= main
 
 on:
   push:
@@ -36,11 +40,16 @@ jobs:
       - name: Run fast_check script
         shell: pwsh
         run: |
+ fix/collect-consistency-default-single
           Remove-Item Env:COLLECT_DIRS -ErrorAction SilentlyContinue
           . .\.venv\Scripts\Activate.ps1
           python --version
           python -m pytest --version
           .\scripts\fast_check.ps1
+
+          .\.venv\Scripts\python.exe --version
+          powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1
+ main
           $rc = $LASTEXITCODE
           Write-Host "fast_check exit code: $rc"
           if ($rc -ne 0) { exit $rc }
