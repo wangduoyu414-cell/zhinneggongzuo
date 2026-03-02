@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
 
+from core.events_log import append_event
 from core.file_io import atomic_write_text
+from core.run_state import load_state, save_state
 
 RUNS_ROOT = Path("reports") / "runs"
 TASKS_DIRNAME = "tasks"
@@ -12,6 +15,7 @@ ARTIFACTS_DIRNAME = "artifacts"
 PROMPT_FILENAME = "web_gpt_prompt.md"
 RESPONSE_FILENAME = "web_gpt_response.md"
 CODEX_TASK_FILENAME = "codex_task.md"
+RESPONSE_FINGERPRINT_FILENAME = "web_gpt_response.sha256"
 
 _FENCED_BLOCK_RE = re.compile(r"```(?P<lang>[^\n`]*)\n(?P<body>.*?)```", re.DOTALL)
 
@@ -27,8 +31,67 @@ def get_artifacts_dir(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) ->
 def emit_prompt(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) -> Path:
     artifacts_dir = get_artifacts_dir(run_id, task_id, runs_root=runs_root)
     prompt_path = artifacts_dir / PROMPT_FILENAME
+    response_path = artifacts_dir / RESPONSE_FILENAME
+    codex_task_path = artifacts_dir / CODEX_TASK_FILENAME
+    if prompt_path.exists() and prompt_path.stat().st_size > 0:
+        append_event(
+            run_id,
+            {
+                "type": "hitl_prompt_skipped_idempotent",
+                "task_id": task_id,
+                "prompt_path": str(prompt_path),
+            },
+        )
+        save_state(
+            run_id,
+            {
+                "task_id": task_id,
+                "stage": "WAIT_GPT",
+                "prompt_path": str(prompt_path),
+                "response_path": str(response_path),
+                "codex_task_path": str(codex_task_path),
+            },
+            runs_root=runs_root,
+        )
+        append_event(
+            run_id,
+            {
+                "type": "run_state_written",
+                "stage": "WAIT_GPT",
+                "task_id": task_id,
+            },
+        )
+        return prompt_path
+
     prompt = _build_prompt(run_id=run_id, task_id=task_id, artifacts_dir=artifacts_dir)
     atomic_write_text(prompt_path, prompt, encoding="utf-8")
+    append_event(
+        run_id,
+        {
+            "type": "hitl_prompt_emitted",
+            "task_id": task_id,
+            "prompt_path": str(prompt_path),
+        },
+    )
+    save_state(
+        run_id,
+        {
+            "task_id": task_id,
+            "stage": "WAIT_GPT",
+            "prompt_path": str(prompt_path),
+            "response_path": str(response_path),
+            "codex_task_path": str(codex_task_path),
+        },
+        runs_root=runs_root,
+    )
+    append_event(
+        run_id,
+        {
+            "type": "run_state_written",
+            "stage": "WAIT_GPT",
+            "task_id": task_id,
+        },
+    )
     return prompt_path
 
 
@@ -41,6 +104,47 @@ def ingest_response(
     artifacts_dir = get_artifacts_dir(run_id, task_id, runs_root=runs_root)
     response_path = artifacts_dir / RESPONSE_FILENAME
     codex_task_path = artifacts_dir / CODEX_TASK_FILENAME
+    response_fingerprint_path = artifacts_dir / RESPONSE_FINGERPRINT_FILENAME
+    response_fingerprint = _sha256(text)
+
+    if response_path.exists() and response_fingerprint_path.exists() and codex_task_path.exists():
+        previous_fingerprint = response_fingerprint_path.read_text(encoding="utf-8").strip()
+        if previous_fingerprint == response_fingerprint:
+            append_event(
+                run_id,
+                {
+                    "type": "hitl_ingest_skipped_idempotent",
+                    "task_id": task_id,
+                    "response_path": str(response_path),
+                },
+            )
+            save_state(
+                run_id,
+                {
+                    "task_id": task_id,
+                    "stage": "DONE",
+                    "prompt_path": str(artifacts_dir / PROMPT_FILENAME),
+                    "response_path": str(response_path),
+                    "codex_task_path": str(codex_task_path),
+                },
+                runs_root=runs_root,
+            )
+            append_event(
+                run_id,
+                {
+                    "type": "run_state_written",
+                    "stage": "DONE",
+                    "task_id": task_id,
+                },
+            )
+            return {
+                "status": "SKIPPED_IDEMPOTENT",
+                "run_id": run_id,
+                "task_id": task_id,
+                "reason": "same response fingerprint",
+                "response_path": str(response_path),
+                "codex_task_path": str(codex_task_path),
+            }
 
     atomic_write_text(response_path, text, encoding="utf-8")
 
@@ -52,10 +156,40 @@ def ingest_response(
         parsed=parsed,
     )
     atomic_write_text(codex_task_path, codex_task_text, encoding="utf-8")
+    atomic_write_text(response_fingerprint_path, response_fingerprint, encoding="utf-8")
 
     warnings: list[str] = []
     if not text.strip():
         warnings.append("response text is empty")
+
+    append_event(
+        run_id,
+        {
+            "type": "hitl_response_ingested",
+            "task_id": task_id,
+            "response_path": str(response_path),
+            "response_char_count": len(text),
+        },
+    )
+    save_state(
+        run_id,
+        {
+            "task_id": task_id,
+            "stage": "DONE",
+            "prompt_path": str(artifacts_dir / PROMPT_FILENAME),
+            "response_path": str(response_path),
+            "codex_task_path": str(codex_task_path),
+        },
+        runs_root=runs_root,
+    )
+    append_event(
+        run_id,
+        {
+            "type": "run_state_written",
+            "stage": "DONE",
+            "task_id": task_id,
+        },
+    )
 
     return {
         "response_path": str(response_path),
@@ -74,6 +208,39 @@ def _parse_response(text: str) -> dict[str, Any]:
         body = match.group("body").strip()
         fenced_code_blocks.append({"language": lang, "content": body})
     return {"fenced_code_blocks": fenced_code_blocks}
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def resume_hitl(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) -> dict[str, Any]:
+    state = load_state(run_id, runs_root=runs_root)
+    if state is None:
+        return {"status": "NO_STATE", "next": "run emit_prompt first"}
+
+    stage = state.get("stage")
+    if stage == "DONE":
+        return {"status": "DONE"}
+
+    if stage != "WAIT_GPT":
+        return {"status": "NO_STATE", "next": "run emit_prompt first"}
+
+    response_path_value = state.get("response_path")
+    if isinstance(response_path_value, str) and response_path_value:
+        response_path = Path(response_path_value)
+    else:
+        response_path = get_artifacts_dir(run_id, task_id, runs_root=runs_root) / RESPONSE_FILENAME
+
+    if response_path.exists() and response_path.stat().st_size > 0:
+        text = response_path.read_text(encoding="utf-8")
+        return ingest_response(run_id, task_id, text, runs_root=runs_root)
+
+    return {
+        "status": "WAIT_GPT",
+        "response_path": str(response_path),
+        "next": "paste web reply into response_path then call resume_hitl again",
+    }
 
 
 def _build_prompt(run_id: str, task_id: str, artifacts_dir: Path) -> str:
