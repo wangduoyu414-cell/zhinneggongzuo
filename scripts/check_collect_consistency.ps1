@@ -10,17 +10,11 @@ $ErrorActionPreference = 'Stop'
 
 function Resolve-RepoRoot {
   param([string]$Path)
-  Push-Location $Path
-  try {
-    $root = (& git rev-parse --show-toplevel 2>$null).Trim()
-    if (-not $root) {
-      throw "not a git worktree: $Path"
-    }
-    return (Resolve-Path $root).Path
+  if (-not $PSScriptRoot) {
+    throw 'PSScriptRoot is not set (unexpected).'
   }
-  finally {
-    Pop-Location
-  }
+  $repo = Resolve-Path (Join-Path $PSScriptRoot '..') -ErrorAction Stop
+  return $repo.Path
 }
 
 function Parse-CollectedCount {
