@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "state.v1.schema.json",
+  "title": "workflow run state (state.v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "created_at", "updated_at", "stage"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "state.v1" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "project": { "type": "string" },
+    "risk": { "type": "string", "enum": ["low", "mid", "high"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "stage": {
+      "type": "string",
+      "enum": ["INIT", "WAIT_INPUT", "EXECUTING", "GATING", "DONE", "FAILED"]
+    },
+    "current_task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "attempt"],
+      "properties": {
+        "task_id": { "type": "string", "minLength": 1 },
+        "attempt": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "last_error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "retryable", "at"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "retryable": { "type": "boolean" },
+        "at": { "type": "string", "format": "date-time" },
+        "task_id": { "type": "string" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "state_path": { "type": "string" },
+        "events_log_path": { "type": "string" },
+        "gate_log_path": { "type": "string" },
+        "commands_log_path": { "type": "string" },
+        "patch_summary_path": { "type": "string" },
+        "result_json_path": { "type": "string" }
+      }
+    }
+  }
+}
