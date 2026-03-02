@@ -1,22 +1,19 @@
 name: fast_check
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
+  push:
+    branches: [ main ]
 
 jobs:
   fast_check:
-    name: fast_check
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python 3.13
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -25,19 +22,18 @@ jobs:
         shell: pwsh
         run: |
           python -m venv .venv
-          .\.venv\Scripts\python.exe --version
+          .\.venv\Scripts\python.exe -m pip install --upgrade pip
           if (Test-Path .\requirements.txt) {
-            .\.venv\Scripts\python.exe -m pip install --upgrade pip
             .\.venv\Scripts\python.exe -m pip install -r .\requirements.txt
           } else {
-            Write-Host "requirements.txt not found, skip dependency install"
+            throw "requirements.txt not found"
           }
 
-      - name: Run fast_check script
+      - name: Run fast_check (venv)
         shell: pwsh
         run: |
-          .\.venv\Scripts\python.exe --version
-          powershell -ExecutionPolicy Bypass -File .\scripts\fast_check.ps1
-          $rc = $LASTEXITCODE
-          Write-Host "fast_check exit code: $rc"
-          if ($rc -ne 0) { exit $rc }
+          Remove-Item Env:COLLECT_DIRS -ErrorAction SilentlyContinue
+          . .\.venv\Scripts\Activate.ps1
+          python --version
+          python -m pytest --version
+          .\scripts\fast_check.ps1
