@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,7 @@ ARTIFACTS_DIRNAME = "artifacts"
 PROMPT_FILENAME = "web_gpt_prompt.md"
 RESPONSE_FILENAME = "web_gpt_response.md"
 CODEX_TASK_FILENAME = "codex_task.md"
+RESPONSE_FINGERPRINT_FILENAME = "web_gpt_response.sha256"
 
 _FENCED_BLOCK_RE = re.compile(r"```(?P<lang>[^\n`]*)\n(?P<body>.*?)```", re.DOTALL)
 
@@ -28,6 +30,17 @@ def get_artifacts_dir(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) ->
 def emit_prompt(run_id: str, task_id: str, runs_root: Path = RUNS_ROOT) -> Path:
     artifacts_dir = get_artifacts_dir(run_id, task_id, runs_root=runs_root)
     prompt_path = artifacts_dir / PROMPT_FILENAME
+    if prompt_path.exists() and prompt_path.stat().st_size > 0:
+        append_event(
+            run_id,
+            {
+                "type": "hitl_prompt_skipped_idempotent",
+                "task_id": task_id,
+                "prompt_path": str(prompt_path),
+            },
+        )
+        return prompt_path
+
     prompt = _build_prompt(run_id=run_id, task_id=task_id, artifacts_dir=artifacts_dir)
     atomic_write_text(prompt_path, prompt, encoding="utf-8")
     append_event(
@@ -50,6 +63,28 @@ def ingest_response(
     artifacts_dir = get_artifacts_dir(run_id, task_id, runs_root=runs_root)
     response_path = artifacts_dir / RESPONSE_FILENAME
     codex_task_path = artifacts_dir / CODEX_TASK_FILENAME
+    response_fingerprint_path = artifacts_dir / RESPONSE_FINGERPRINT_FILENAME
+    response_fingerprint = _sha256(text)
+
+    if response_path.exists() and response_fingerprint_path.exists() and codex_task_path.exists():
+        previous_fingerprint = response_fingerprint_path.read_text(encoding="utf-8").strip()
+        if previous_fingerprint == response_fingerprint:
+            append_event(
+                run_id,
+                {
+                    "type": "hitl_ingest_skipped_idempotent",
+                    "task_id": task_id,
+                    "response_path": str(response_path),
+                },
+            )
+            return {
+                "status": "SKIPPED_IDEMPOTENT",
+                "run_id": run_id,
+                "task_id": task_id,
+                "reason": "same response fingerprint",
+                "response_path": str(response_path),
+                "codex_task_path": str(codex_task_path),
+            }
 
     atomic_write_text(response_path, text, encoding="utf-8")
 
@@ -61,6 +96,7 @@ def ingest_response(
         parsed=parsed,
     )
     atomic_write_text(codex_task_path, codex_task_text, encoding="utf-8")
+    atomic_write_text(response_fingerprint_path, response_fingerprint, encoding="utf-8")
 
     warnings: list[str] = []
     if not text.strip():
@@ -93,6 +129,10 @@ def _parse_response(text: str) -> dict[str, Any]:
         body = match.group("body").strip()
         fenced_code_blocks.append({"language": lang, "content": body})
     return {"fenced_code_blocks": fenced_code_blocks}
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _build_prompt(run_id: str, task_id: str, artifacts_dir: Path) -> str:

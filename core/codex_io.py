@@ -35,6 +35,18 @@ def read_codex_task(run_id: str, runs_root: Path = RUNS_ROOT) -> str:
 
 def write_codex_result(run_id: str, payload: dict[str, Any], runs_root: Path = RUNS_ROOT) -> Path:
     path = get_codex_result_path(run_id, runs_root)
+    if path.exists():
+        previous = read_json(path, encoding="utf-8")
+        if previous == payload:
+            append_event(
+                run_id,
+                {
+                    "type": "codex_result_skipped_idempotent",
+                    "path": str(path),
+                },
+            )
+            return path
+
     atomic_write_json(path, payload)
     append_event(
         run_id,
