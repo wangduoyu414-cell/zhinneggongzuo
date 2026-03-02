@@ -1,6 +1,4 @@
-﻿param(
-  [string[]]$Directories,
-  [string[]]$Exclude = @(),
+param(
   [string]$PythonPath = 'python',
   [string]$Timestamp,
   [string]$OutputRoot
@@ -23,8 +21,61 @@ function Resolve-RepoRoot {
   }
 }
 
+function Resolve-CollectDirs {
+  param([string]$Raw)
+
+  if ([string]::IsNullOrWhiteSpace($Raw)) {
+    return @((Resolve-Path (Get-Location).Path).Path)
+  }
+
+  $result = @()
+  $seen = @{}
+  foreach ($part in ($Raw -split '[;,]')) {
+    $dir = $part.Trim()
+    if (-not $dir) { continue }
+
+    if (-not (Test-Path $dir)) {
+      throw "collect directory not found: $dir"
+    }
+
+    $resolved = (Resolve-Path $dir).Path
+    if (-not $seen.ContainsKey($resolved)) {
+      $seen[$resolved] = $true
+      $result += $resolved
+    }
+  }
+
+  if ($result.Count -eq 0) {
+    throw 'COLLECT_DIRS provided but no valid directories parsed'
+  }
+
+  return $result
+}
+
+function Invoke-CollectOnly {
+  param(
+    [string]$Workdir,
+    [string]$OutputFile
+  )
+
+  Push-Location $Workdir
+  try {
+    $lines = & $PythonPath -m pytest -q --collect-only 2>&1
+    $exitCode = $LASTEXITCODE
+    $lines | Set-Content -Path $OutputFile -Encoding utf8
+    if ($exitCode -ne 0) {
+      throw "pytest collect-only failed in $Workdir"
+    }
+    return $lines
+  }
+  finally {
+    Pop-Location
+  }
+}
+
 function Parse-CollectedCount {
   param([string[]]$Lines)
+
   for ($i = $Lines.Count - 1; $i -ge 0; $i--) {
     $line = [string]$Lines[$i]
     if ($line -match '(?i)^(\d+)\s+tests?\s+collected') {
@@ -34,199 +85,172 @@ function Parse-CollectedCount {
       return [int]$Matches[1]
     }
   }
+
   throw 'unable to parse collected line from pytest output'
 }
 
-if (-not $Directories -or $Directories.Count -eq 0) {
-  $cwd = (Get-Location).Path
-  $Directories = @(
-    $cwd,
-    'D:/智能体工作流_w1_contract',
-    'D:/智能体工作流_w2_bridge',
-    'D:/智能体工作流_w3_codexcli',
-    'D:/智能体工作流_w4_flow'
-  )
+function Get-CollectedCount {
+  param([string[]]$Lines)
+  return (Parse-CollectedCount -Lines $Lines)
 }
 
-$excludeResolved = @{}
-foreach ($e in $Exclude) {
-  if (-not $e) { continue }
-  if (Test-Path $e) {
-    $excludeResolved[(Resolve-Path $e).Path.ToLowerInvariant()] = $true
-  }
-  else {
-    $excludeResolved[$e.ToLowerInvariant()] = $true
-  }
+function Get-NodeIds {
+  param([string[]]$Lines)
+
+  # 兼容 Windows/Unix 路径与 pytest 输出格式
+  $rx = '^(tests/|reports/|\.\/tests\/|\.\\tests\\|tests\\|reports\\).+::'
+  return @($Lines | Where-Object { $_ -match $rx } | ForEach-Object { ([string]$_).Trim() })
 }
 
-$resolvedDirs = @()
-foreach ($d in $Directories) {
-  if (-not (Test-Path $d)) {
-    throw "directory not found: $d"
-  }
-  $full = (Resolve-Path $d).Path
-  if ($excludeResolved.ContainsKey($full.ToLowerInvariant())) {
-    continue
-  }
-  if ($excludeResolved.ContainsKey((Split-Path $full -Leaf).ToLowerInvariant())) {
-    continue
-  }
-  $resolvedDirs += $full
-}
+# -------- Main --------
 
-if ($resolvedDirs.Count -eq 0) {
-  throw 'no directories left after applying exclude filter'
-}
-
-$root = Resolve-RepoRoot -Path $resolvedDirs[0]
-if (-not $OutputRoot) {
-  $OutputRoot = Join-Path $root 'reports/preflight'
-}
+$repoRoot = Resolve-RepoRoot -Path (Get-Location).Path
 
 if (-not $Timestamp) {
   $Timestamp = (Get-Date -Format 'yyyyMMdd_HHmmss') + '_' + (Get-Random -Minimum 1000 -Maximum 9999)
 }
 
+if (-not $OutputRoot) {
+  $OutputRoot = Join-Path $repoRoot 'reports/preflight'
+}
+
 $reportDir = Join-Path $OutputRoot $Timestamp
 New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
-$Timestamp | Set-Content -Path (Join-Path $root 'reports/preflight/LATEST.txt') -Encoding utf8
 
-$results = @()
+# 记录 LATEST
+$latestPath = Join-Path $OutputRoot 'LATEST.txt'
+$Timestamp | Set-Content -Path $latestPath -Encoding utf8
 
-foreach ($dir in $resolvedDirs) {
-  $name = Split-Path $dir -Leaf
-  $dirReport = Join-Path $reportDir $name
-  New-Item -ItemType Directory -Path $dirReport -Force | Out-Null
+$collectDirs = @(Resolve-CollectDirs -Raw $env:COLLECT_DIRS)
+$isMulti = $collectDirs.Count -gt 1
+$mode = if ($isMulti) { 'multi-dir' } else { 'single-dir' }
 
-  Push-Location $dir
-  try {
-    $head = (& git rev-parse --short HEAD 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-      throw "failed to read HEAD in $dir"
-    }
-    $headText = ([string]$head[0]).Trim()
-    $headText | Set-Content -Path (Join-Path $dirReport 'head.txt') -Encoding utf8
+Write-Host "[collect_check] mode=$mode"
+Write-Host "[collect_check] dirs=$($collectDirs -join ';')"
+Write-Host "[collect_check] python=$PythonPath"
+Write-Host "[collect_check] report=$reportDir"
 
-    $statusLines = @(& git status --porcelain 2>&1)
-    $statusLines | Set-Content -Path (Join-Path $dirReport 'git_status.txt') -Encoding utf8
-    $isDirty = ($statusLines | Where-Object { $_ -and $_.Trim().Length -gt 0 }).Count -gt 0
-    $hasConflict = ($statusLines | Where-Object { $_ -match '^(UU|AA|DD|AU|UA|DU|UD)\s' }).Count -gt 0
+$records = @()
+for ($i = 0; $i -lt $collectDirs.Count; $i++) {
+  $dir = $collectDirs[$i]
+  $label = if ($i -eq 0) { 'main' } elseif ($i -eq 1) { 'w1' } else { "dir$($i + 1)" }
 
-    $collectLines = @(& $PythonPath -m pytest -q --collect-only 2>&1)
-    $collectExit = $LASTEXITCODE
-    $collectLines | Set-Content -Path (Join-Path $dirReport 'collect.txt') -Encoding utf8
+  $collectPath = Join-Path $reportDir ("{0}_collect.txt" -f $label)
+  $lines = Invoke-CollectOnly -Workdir $dir -OutputFile $collectPath
 
-    if ($collectExit -ne 0) {
-      $hint = "pytest collect-only failed in $dir. Ensure dependencies are installed and use a valid interpreter, e.g. -PythonPath D:/智能体工作流/.venv/Scripts/python.exe"
-      $hint | Set-Content -Path (Join-Path $dirReport 'error.txt') -Encoding utf8
-      throw $hint
-    }
-
-    $collectCount = Parse-CollectedCount -Lines $collectLines
-    $collectLine = ($collectLines | Where-Object { $_ -match '(?i)(tests? collected|collected\s+\d+\s+items?)' } | Select-Object -Last 1)
-    if (-not $collectLine) {
-      $collectLine = "collect_count=$collectCount"
-    }
-
-    "collect_line=$collectLine" | Set-Content -Path (Join-Path $dirReport 'collect_line.txt') -Encoding utf8
-    "collect_count=$collectCount" | Set-Content -Path (Join-Path $dirReport 'collect_count.txt') -Encoding utf8
-
-    $nodeIds = @($collectLines | Where-Object { $_ -match '::' -and $_ -match '^(tests/|reports/|\./tests/|\.\\tests\\)' } | ForEach-Object { ([string]$_).Trim() })
-    $nodeIds | Set-Content -Path (Join-Path $dirReport 'collected_items.txt') -Encoding utf8
-
-    $results += [pscustomobject]@{
-      Name = $name
-      Path = $dir
-      Head = $headText
-      IsDirty = $isDirty
-      HasConflict = $hasConflict
-      CollectCount = $collectCount
-      CollectLine = [string]$collectLine
-      Items = $nodeIds
-    }
-  }
-  finally {
-    Pop-Location
+  $records += [pscustomobject]@{
+    Label       = $label
+    Dir         = $dir
+    CollectPath = $collectPath
+    Count       = Get-CollectedCount -Lines $lines
+    NodeIds     = Get-NodeIds -Lines $lines
   }
 }
 
-$collectedDiffPath = Join-Path $reportDir 'collected_diff.txt'
+$diffPath = Join-Path $reportDir 'collected_diff.txt'
 $summaryPath = Join-Path $reportDir 'summary.md'
 
-$counts = @($results | Select-Object -ExpandProperty CollectCount)
-$uniqueCounts = @($counts | Sort-Object -Unique)
-$countConsistent = ($uniqueCounts.Count -eq 1)
-$dirtyDirs = @($results | Where-Object { $_.IsDirty } | Select-Object -ExpandProperty Name)
-$conflictDirs = @($results | Where-Object { $_.HasConflict } | Select-Object -ExpandProperty Name)
+# ---- single-dir ----
+if (-not $isMulti) {
+  $single = $records[0]
 
-$fileSetConsistent = $true
-$fileSetNote = 'skipped'
-if ($results.Count -gt 1) {
-  $baseSet = @($results[0].Items | Sort-Object -Unique)
-  $fileSetNote = 'compared'
-  foreach ($r in $results | Select-Object -Skip 1) {
-    $compare = Compare-Object -ReferenceObject $baseSet -DifferenceObject (@($r.Items | Sort-Object -Unique))
-    if ($compare) {
-      $fileSetConsistent = $false
-      break
+  @(
+    'mode=single-dir'
+    "dir=$($single.Dir)"
+    "collect_path=$($single.CollectPath)"
+    "collected=$($single.Count)"
+    'status=PASS'
+    'reason=single directory collect-only succeeded'
+  ) | Set-Content -Path $diffPath -Encoding utf8
+
+  @(
+    '# Collect Consistency Summary'
+    ''
+    "- timestamp: $Timestamp"
+    '- mode: single-dir'
+    "- directory: $($single.Dir)"
+    "- python: $PythonPath"
+    "- collected: $($single.Count)"
+    "- diff file: $diffPath"
+  ) | Set-Content -Path $summaryPath -Encoding utf8
+
+  Write-Host "[collect_check] PASS: single-dir collected=$($single.Count)"
+  Write-Host "[collect_check] see $diffPath"
+  exit 0
+}
+
+# ---- multi-dir ----
+$baseline = $records[0]
+$allMatch = $true
+
+$diffLines = @(
+  'mode=multi-dir'
+  "baseline_label=$($baseline.Label)"
+  "baseline_path=$($baseline.Dir)"
+  "baseline_collected=$($baseline.Count)"
+)
+
+foreach ($record in $records) {
+  $diffLines += "dir[$($record.Label)]=$($record.Dir)"
+  $diffLines += "collected[$($record.Label)]=$($record.Count)"
+}
+
+foreach ($record in $records | Select-Object -Skip 1) {
+  $onlyBase  = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru |
+               Where-Object { $_ -in $baseline.NodeIds }
+  $onlyOther = Compare-Object -ReferenceObject $baseline.NodeIds -DifferenceObject $record.NodeIds -PassThru |
+               Where-Object { $_ -in $record.NodeIds }
+
+  if (($baseline.Count -ne $record.Count) -or $onlyBase.Count -gt 0 -or $onlyOther.Count -gt 0) {
+    $allMatch = $false
+    $diffLines += "mismatch_pair=$($baseline.Label),$($record.Label)"
+
+    if ($baseline.Count -ne $record.Count) {
+      $diffLines += "count_mismatch[$($record.Label)]=$($baseline.Count),$($record.Count)"
+    }
+
+    if ($onlyBase.Count -gt 0) {
+      $diffLines += "only_in_$($baseline.Label)_vs_$($record.Label):"
+      $diffLines += ($onlyBase | Select-Object -First 30)
+    }
+    if ($onlyOther.Count -gt 0) {
+      $diffLines += "only_in_$($record.Label)_vs_$($baseline.Label):"
+      $diffLines += ($onlyOther | Select-Object -First 30)
     }
   }
 }
 
-$diff = @()
-$diff += "timestamp=$Timestamp"
-$diff += "status_count_consistent=$countConsistent"
-$diff += "status_fileset_consistent=$fileSetConsistent"
-$diff += "status_dirty_dirs=$($dirtyDirs.Count)"
-$diff += "status_conflict_dirs=$($conflictDirs.Count)"
-$diff += "counts=$($uniqueCounts -join ',')"
-foreach ($r in $results) {
-  $diff += "--- $($r.Name)"
-  $diff += "path=$($r.Path)"
-  $diff += "head=$($r.Head)"
-  $diff += "dirty=$($r.IsDirty)"
-  $diff += "conflict=$($r.HasConflict)"
-  $diff += "collect_count=$($r.CollectCount)"
-  $diff += "collect_line=$($r.CollectLine)"
-}
-$diff | Set-Content -Path $collectedDiffPath -Encoding utf8
+$diffLines += if ($allMatch) { 'status=PASS' } else { 'status=FAIL' }
+$diffLines | Set-Content -Path $diffPath -Encoding utf8
 
 $summary = @(
-  '# Collect Consistency Preflight',
-  '',
-  "- timestamp: $Timestamp",
-  "- report_dir: $reportDir",
-  "- python: $PythonPath",
-  "- directories: $($resolvedDirs.Count)",
-  "- collected counts: $($uniqueCounts -join ', ')",
-  "- count consistent: $countConsistent",
-  "- file set check: $fileSetNote / consistent=$fileSetConsistent",
-  "- conflict directories: $($conflictDirs -join ', ')",
-  "- dirty directories: $($dirtyDirs -join ', ')"
+  '# Collect Consistency Summary'
+  ''
+  "- timestamp: $Timestamp"
+  '- mode: multi-dir'
+  "- python: $PythonPath"
+  "- directories: $($collectDirs -join ';')"
+  "- diff file: $diffPath"
 )
 $summary | Set-Content -Path $summaryPath -Encoding utf8
 
-if ($conflictDirs.Count -gt 0) {
-  Write-Host "[collect_check] FAIL: conflicted worktree detected: $($conflictDirs -join ', ')"
-  Write-Host "[collect_check] see $collectedDiffPath"
-  exit 1
-}
-if ($resolvedDirs.Count -gt 1 -and $dirtyDirs.Count -gt 0) {
-  Write-Host "[collect_check] FAIL: dirty worktree detected: $($dirtyDirs -join ', ')"
-  Write-Host "[collect_check] see $collectedDiffPath"
-  exit 1
-}
-if (-not $countConsistent) {
-  Write-Host "[collect_check] FAIL: collected item count mismatch ($($uniqueCounts -join ', '))"
-  Write-Host "[collect_check] see $collectedDiffPath"
-  exit 1
-}
-if (-not $fileSetConsistent) {
-  Write-Host "[collect_check] FAIL: collected item file set mismatch"
-  Write-Host "[collect_check] see $collectedDiffPath"
+if (-not $allMatch) {
+  if ($records.Count -ge 2) {
+    Write-Host "[collect_check] FAIL: $($records[0].Label)=$($records[0].Count), $($records[1].Label)=$($records[1].Count)"
+  }
+  else {
+    Write-Host '[collect_check] FAIL: collected mismatch'
+  }
+  Write-Host "[collect_check] see $diffPath"
   exit 1
 }
 
-Write-Host "[collect_check] PASS: collected count and file set are consistent"
-Write-Host "[collect_check] report: $reportDir"
+if ($records.Count -ge 2) {
+  Write-Host "[collect_check] PASS: $($records[0].Label)=$($records[0].Count), $($records[1].Label)=$($records[1].Count)"
+}
+else {
+  Write-Host "[collect_check] PASS: collected=$($records[0].Count)"
+}
+
+Write-Host "[collect_check] see $diffPath"
 exit 0

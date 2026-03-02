@@ -26,6 +26,10 @@ if ($untrackedTests) {
   exit 1
 }
 
+ fix/collect-consistency-default-single
+Write-Host "[fast_check] verify collected item count consistency"
+& "$PSScriptRoot/check_collect_consistency.ps1"
+
 $pythonCmd = if ($env:PYTHON) { $env:PYTHON } else { "python" }
 # collect-only consistency preflight:
 # - default checks current directory only
@@ -41,6 +45,7 @@ if (Test-Path "$PSScriptRoot/check_collect_consistency.ps1") {
     & "$PSScriptRoot/check_collect_consistency.ps1" -Directories @((Get-Location).Path) -PythonPath $pythonCmd
   }
 }
+ main
 if ($LASTEXITCODE -ne 0) {
   Write-Host "[fast_check] failed"
   exit $LASTEXITCODE
