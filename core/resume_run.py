@@ -8,6 +8,7 @@ from typing import Any
 from core.events_log import append_event
 from core.execution_lock import acquire, release
 from core.file_io import atomic_write_text, read_json
+from core.repo_paths import gate_script_path, resolve_repo_root, snapshot_script_path
 from core.run_state import RUNS_ROOT, load_state, save_state
 from core.state_v1 import map_stage
 from core.transitions import validate_transition
@@ -73,10 +74,77 @@ def _gate_status_from_log(gate_log_path: Path) -> str | None:
     return None
 
 
+def _write_repo_snapshot(run_dir: Path, repo_root: Path) -> Path:
+    snapshot_path = run_dir / "repo_snapshot.txt"
+    script_path = snapshot_script_path(repo_root=repo_root)
+    if not script_path.exists():
+        atomic_write_text(
+            snapshot_path,
+            (
+                f"timestamp={_utc_now()}\n"
+                "snapshot_status=warning\n"
+                f"reason=missing script: {script_path}\n"
+                "git_status=unavailable\n"
+            ),
+            encoding="utf-8",
+        )
+        return snapshot_path
+    try:
+        proc = subprocess.run(
+            [
+                "powershell",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script_path),
+                "-RepoRoot",
+                str(repo_root),
+                "-OutputPath",
+                str(snapshot_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if not snapshot_path.exists():
+            atomic_write_text(
+                snapshot_path,
+                (
+                    f"timestamp={_utc_now()}\n"
+                    "snapshot_status=warning\n"
+                    "reason=snapshot script did not create output file\n"
+                    f"exit_code={proc.returncode}\n"
+                ),
+                encoding="utf-8",
+            )
+    except Exception as exc:
+        atomic_write_text(
+            snapshot_path,
+            (
+                f"timestamp={_utc_now()}\n"
+                "snapshot_status=warning\n"
+                f"reason=snapshot execution failed: {exc}\n"
+            ),
+            encoding="utf-8",
+        )
+    return snapshot_path
+
+
 def _run_gate(run_dir: Path, mode: str) -> tuple[bool, Path, str]:
-    script = "fast_check.ps1" if mode == "fast" else "full_check.ps1"
-    script_path = Path("scripts") / script
     gate_log_path = run_dir / GATE_LOG_NAME
+    try:
+        repo_root = resolve_repo_root(start_dir=run_dir)
+    except RuntimeError as exc:
+        log = (
+            f"mode={mode}\nstatus=FAILED\nexit_code=126\n"
+            f"reason={exc}\n"
+            "hint=Set REPO_ROOT to the repository root path\n"
+        )
+        atomic_write_text(gate_log_path, log, encoding="utf-8")
+        return False, gate_log_path, "repo_root unresolved"
+
+    _write_repo_snapshot(run_dir, repo_root)
+    script_path = gate_script_path(repo_root=repo_root, mode=mode)
     if not script_path.exists():
         log = f"mode={mode}\nstatus=FAILED\nexit_code=127\nreason=missing script: {script_path}\n"
         atomic_write_text(gate_log_path, log, encoding="utf-8")

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import core.resume_run as resume_mod
 from core.execution_lock import acquire, release
 from core.resume_run import resume_run
 from core.run_state import load_state, save_state
@@ -101,3 +102,40 @@ def test_regression_chain_executing_to_gating_to_done(tmp_path: Path, monkeypatc
     monkeypatch.setattr("core.resume_run._run_gate", fake_run_gate)
     stage2 = resume_run(run_id, runs_root=runs_root)
     assert stage2 == "DONE"
+
+
+def test_run_gate_path_independent_of_cwd_and_snapshot_created(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo_root = tmp_path / "repo"
+    scripts_dir = repo_root / "scripts"
+    scripts_dir.mkdir(parents=True, exist_ok=True)
+    (repo_root / ".git").mkdir(parents=True, exist_ok=True)
+    (scripts_dir / "fast_check.ps1").write_text("Write-Host ok; exit 0\n", encoding="utf-8")
+    (scripts_dir / "repo_snapshot.ps1").write_text("Write-Host snapshot; exit 0\n", encoding="utf-8")
+
+    run_dir = tmp_path / "reports" / "runs" / "r8"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_path = run_dir / "repo_snapshot.txt"
+    called_files: list[str] = []
+
+    class _Proc:
+        def __init__(self, returncode: int = 0) -> None:
+            self.returncode = returncode
+            self.stdout = "ok"
+            self.stderr = ""
+
+    def fake_subprocess_run(args, capture_output, text, check):  # type: ignore[no-untyped-def]
+        called_files.append(str(args[4]))
+        if str(args[4]).endswith("repo_snapshot.ps1"):
+            out_idx = args.index("-OutputPath")
+            Path(args[out_idx + 1]).write_text("head_commit=fake\n", encoding="utf-8")
+        return _Proc(0)
+
+    monkeypatch.setenv("REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(resume_mod.subprocess, "run", fake_subprocess_run)
+    ok, _, status = resume_mod._run_gate(run_dir, "fast")
+    assert ok is True
+    assert status == "PASSED"
+    assert snapshot_path.exists()
+    assert any(Path(p).name == "fast_check.ps1" for p in called_files)
